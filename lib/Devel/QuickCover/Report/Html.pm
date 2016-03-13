@@ -54,11 +54,12 @@ sub add_file {
 sub render {
     my ($self) = @_;
     my $date = POSIX::strftime('%c', localtime(time));
+    my @existing;
 
     for my $item (@{$self->{files}}) {
-        $self->_render_file($date, $item);
+        push @existing, $item if $self->_render_file($date, $item);
     }
-    $self->render_main($date);
+    $self->render_main($date, \@existing);
 
     # copy CSS/JS
     File::Copy::copy(
@@ -77,10 +78,10 @@ sub render_file {
 }
 
 sub render_main {
-    my ($self, $date) = @_;
+    my ($self, $date, $items) = @_;
     my @files = sort {
         $a->{display_name} cmp $b->{display_name}
-    } @{$self->{files}};
+    } @{$items || $self->{files}};
 
     $self->_write_template(
         $TEMPLATES{index},
@@ -118,6 +119,8 @@ sub _make_item {
 sub _render_file {
     my ($self, $date, $item) = @_;
     my $source = $self->_fetch_source($item);
+
+    return unless $source;
     my $lines = ['I hope you never shee this...', split /\n/, $source];
 
     $self->_write_template(
@@ -140,6 +143,7 @@ sub _fetch_source {
 
     die "TODO" if $item->{git_repository};
 
+    return unless -f $item->{file_name};
     open my $fh, '<', $item->{file_name};
     local $/;
     return scalar readline $fh;
