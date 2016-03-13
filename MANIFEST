@@ -1,0 +1,10 @@
+bin/qc-html-report.pl
+lib/Devel/QuickCover/Report/Html.pm
+Makefile.PL
+MANIFEST
+share/file.tmpl
+share/header.tmpl
+share/index.tmpl
+share/quickcover.css
+share/sorttable.js
+t/001_load.t
