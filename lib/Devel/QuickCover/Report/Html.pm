@@ -5,6 +5,7 @@ use warnings;
 use autodie qw(open close chdir);
 
 use Devel::QuickCover::Report;
+use Devel::QuickCover::Report::Fetcher::Git;
 use File::Copy;
 use File::ShareDir;
 use File::Spec::Functions;
@@ -32,15 +33,34 @@ sub new {
 }
 
 sub add_report {
-    my ($self, $report) = @_;
+    my ($self, $report, $repositories) = @_;
     my $files = $report->filenames;
     my $coverage = $report->coverage;
+    my ($prefix_rx, %prefix_map);
+
+    if ($repositories && @$repositories) {
+        my $prefix_pattern = join '|', map quotemeta($_->{prefix}), @$repositories;
+        %prefix_map = map +($_->{prefix} => $_), @$repositories;
+        $prefix_rx = qr{^($prefix_pattern)};
+    }
 
     for my $file (@$files) {
-        $self->add_file(
-            file_name   => $file,
-            coverage    => $coverage->{$file},
-        );
+        if ($prefix_rx && $file =~ $prefix_rx) {
+            my $repository = $prefix_map{$1};
+
+            $self->add_file(
+                file_name       => $file,
+                coverage        => $coverage->{$file},
+                git_repository  => $repository->{repository},
+                git_commit      => $repository->{commit},
+                git_prefix      => $repository->{prefix},
+            );
+        } else {
+            $self->add_file(
+                file_name   => $file,
+                coverage    => $coverage->{$file},
+            );
+        }
     }
 }
 
@@ -106,7 +126,7 @@ sub _make_item {
         coverage        => $args->{coverage},
         git_repository  => $args->{git_repository},
         git_commit      => $args->{git_commit},
-        git_name        => $args->{git_name},
+        git_prefix      => $args->{git_prefix},
     );
     my $covered = grep $_, values %{$item{coverage}};
     $item{percentage} = $covered / keys %{$item{coverage}};
@@ -141,12 +161,27 @@ sub _render_file {
 sub _fetch_source {
     my ($self, $item) = @_;
 
-    die "TODO" if $item->{git_repository};
+    if ($item->{git_repository}) {
+        my $fetcher = $self->{fetchers}{_fetcher_key($item)} ||= Devel::QuickCover::Report::Fetcher::Git->new(
+            $item->{git_prefix}, $item->{git_repository}, $item->{git_commit},
+        );
+        my $source = $fetcher->fetch($item->{file_name});
+        return $source ? $$source : undef;;
+    }
 
-    return unless -f $item->{file_name};
+    return undef unless -f $item->{file_name};
     open my $fh, '<', $item->{file_name};
     local $/;
     return scalar readline $fh;
+}
+
+sub _fetcher_key {
+    my ($item) = @_;
+
+    return join "\x00",
+        $item->{git_repository},
+        $item->{git_commit},
+        $item->{git_prefix};
 }
 
 sub _get_template {
