@@ -1,0 +1,5 @@
+=head1 MOVED
+
+See L<Devel::QuickCover|https://github.com/p5pclub/devel-quickcover>
+
+=cut
